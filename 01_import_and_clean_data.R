@@ -5,12 +5,15 @@
 # data (2015-2019)
 #
 # Output:
-#   data/processed/clean_dataset.rds
+#   data/processed/analysis_population.rds
 #
 ############################################################
 
 
-# Load packages
+############################################################
+# Packages
+############################################################
+
 source(here("R", "00_packages.R"))
 
 
@@ -27,89 +30,84 @@ db <- read_csv(
 
 
 ############################################################
-# Data preprocessing
+# Basic preprocessing
 ############################################################
 
 db <- db %>%
   mutate(
-    OORZAAKCATEGORIEID = ifelse(
-      is.na(OORZAAKCATEGORIEID),
-      11,
-      OORZAAKCATEGORIEID
-    ),
 
-    INTENTIE = ifelse(
-      is.na(INTENTIE),
-      18,
-      INTENTIE
-    ),
+    # Missing values
+    OORZAAKCATEGORIEID =
+      ifelse(is.na(OORZAAKCATEGORIEID),
+             11,
+             OORZAAKCATEGORIEID),
 
-    INTUBATIEPREHOSP = ifelse(
-      is.na(INTUBATIEPREHOSP),
-      0,
-      INTUBATIEPREHOSP
-    ),
+    INTENTIE =
+      ifelse(is.na(INTENTIE),
+             18,
+             INTENTIE),
 
-    LETSELAARDWAARDEID = ifelse(
-      is.na(LETSELAARDWAARDEID),
-      0,
-      LETSELAARDWAARDEID
-    ),
+    INTUBATIEPREHOSP =
+      ifelse(is.na(INTUBATIEPREHOSP),
+             0,
+             INTUBATIEPREHOSP),
 
-    MMT_ = ifelse(
-      is.na(MMT_),
-      0,
-      MMT_
-    ),
+    LETSELAARDWAARDEID =
+      ifelse(is.na(LETSELAARDWAARDEID),
+             0,
+             LETSELAARDWAARDEID),
 
-    MMT = ifelse(
-      is.na(MMT),
-      0,
-      MMT
-    ),
+    MMT =
+      ifelse(is.na(MMT),
+             0,
+             MMT),
 
-    INTERVENTIETYPE = ifelse(
-      is.na(INTERVENTIETYPE),
-      0,
-      INTERVENTIETYPE
-    ),
+    INTERVENTIETYPE =
+      ifelse(is.na(INTERVENTIETYPE),
+             0,
+             INTERVENTIETYPE),
 
-    OVERLEDEN30D = ifelse(
-      is.na(OVERLEDEN30D),
-      0,
-      OVERLEDEN30D
-    ),
 
+    # Outcome timing
     TIJDTOTOVERLIJDEN =
       DATUMOVERLEDEN - DATUMAANKOMST,
 
 
-    OVERLEDEN24H = ifelse(
-      TIJDTOTOVERLIJDEN > 0 &
-        TIJDTOTOVERLIJDEN < 1440,
-      1,
-      0
-    ),
+    OVERLEDEN24H =
+      ifelse(
+        TIJDTOTOVERLIJDEN > 0 &
+          TIJDTOTOVERLIJDEN < 1440,
+        1,
+        0
+      ),
 
-    OVERLEDEN24H = ifelse(
-      is.na(OVERLEDEN24H),
-      0,
-      OVERLEDEN24H
-    ),
-
-
-    SPOEDINTERVENTIE = ifelse(
-      INTERVENTIETYPE %in% c(1:10),
-      1,
-      0
-    ),
+    OVERLEDEN24H =
+      ifelse(
+        is.na(OVERLEDEN24H),
+        0,
+        OVERLEDEN24H
+      ),
 
 
-    SEH_ICU = ifelse(
-      is.na(OVERPLBESTID),
-      0,
-      ifelse(OVERPLBESTID == 4, 1, 0)
-    ),
+    # Emergency interventions
+    SPOEDINTERVENTIE =
+      ifelse(
+        INTERVENTIETYPE %in% 1:10,
+        1,
+        0
+      ),
+
+
+    SEH_ICU =
+      ifelse(
+        is.na(OVERPLBESTID),
+        0,
+        ifelse(
+          OVERPLBESTID == 4,
+          1,
+          0
+        )
+      ),
 
 
     ECRU =
@@ -122,17 +120,19 @@ db <- db %>%
       ),
 
 
-    JAAR = year(IDAABA)
+    JAAR =
+      year(IDAABA),
 
-  ) %>%
-  select(
-    -MMT_,
-    -REANIMATIE
+
+    # Trauma region for clustering/imputation
+    REGIO =
+      factor(TRAUMAREGIOID)
+
   )
 
 
 ############################################################
-# Study population selection
+# Study population
 ############################################################
 
 analysis_population <- db %>%
@@ -144,66 +144,30 @@ analysis_population <- db %>%
 
 
 ############################################################
-# Separate variables used before and after imputation
-############################################################
-
-df <- analysis_population %>%
-  select(
-    ID,
-    IDAABA,
-    ONGEVALDT,
-    DATUMAANKOMST,
-    VERKEERWAARDEID,
-    HERKOMSTWAARDEID,
-    OVERPLBESTID,
-    ONTSLAGBESTEMMINGID,
-    INTERVENTIEDT,
-    DAGENIC,
-    LEEFTIJDSEH,
-    DATUMOVERLEDEN,
-    JAAR,
-    GPSDATA,
-    TIJDTOTOVERLIJDEN
-  )
-
-
-imp <- analysis_population %>%
-  select(
-    -ID,
-    -IDAABA,
-    -ONGEVALDT,
-    -DATUMAANKOMST,
-    -VERKEERWAARDEID,
-    -HERKOMSTWAARDEID,
-    -OVERPLBESTID,
-    -ONTSLAGBESTEMMINGID,
-    -INTERVENTIEDT,
-    -DAGENIC,
-    -LEEFTIJDSEH,
-    -DATUMOVERLEDEN,
-    -JAAR,
-    -GPSDATA,
-    -TIJDTOTOVERLIJDEN
-  )
-
-
-############################################################
-# Create analysis variables
+# Derived analysis variables
 ############################################################
 
 analysis_population <- analysis_population %>%
   mutate(
 
-    AIS_1_3 = ifelse(AIS_1 >= 3, 1, 0),
-    AIS_2_3 = ifelse(AIS_2 >= 3, 1, 0),
-    AIS_3_3 = ifelse(AIS_3 >= 3, 1, 0),
-    AIS_4_3 = ifelse(AIS_4 >= 3, 1, 0),
-    AIS_5_3 = ifelse(AIS_5 >= 3, 1, 0),
-    AIS_6_3 = ifelse(AIS_6 >= 3, 1, 0),
-    AIS_7_3 = ifelse(AIS_7 >= 3, 1, 0),
-    AIS_8_3 = ifelse(AIS_8 >= 3, 1, 0),
-    AIS_9_3 = ifelse(AIS_9 >= 3, 1, 0),
+    # Injury severity
+    ISS16 =
+      ifelse(auto_ISS >= 16,1,0),
 
+
+    # AIS regions
+    AIS_1_3 = ifelse(AIS_1 >=3,1,0),
+    AIS_2_3 = ifelse(AIS_2 >=3,1,0),
+    AIS_3_3 = ifelse(AIS_3 >=3,1,0),
+    AIS_4_3 = ifelse(AIS_4 >=3,1,0),
+    AIS_5_3 = ifelse(AIS_5 >=3,1,0),
+    AIS_6_3 = ifelse(AIS_6 >=3,1,0),
+    AIS_7_3 = ifelse(AIS_7 >=3,1,0),
+    AIS_8_3 = ifelse(AIS_8 >=3,1,0),
+    AIS_9_3 = ifelse(AIS_9 >=3,1,0),
+
+
+    # Mechanism of injury
     FALL =
       ifelse(INTENTIE %in% c(10,11),1,0),
 
@@ -213,18 +177,43 @@ analysis_population <- analysis_population %>%
     FALL_HIGH =
       ifelse(INTENTIE == 11,1,0),
 
+
     TRAFFIC =
       ifelse(INTENTIE %in% 1:6,1,0),
 
+
+    TRAFFIC_CAR =
+      ifelse(INTENTIE == 1,1,0),
+
+    TRAFFIC_MOTOR =
+      ifelse(INTENTIE == 2,1,0),
+
+    TRAFFIC_SCOOTER =
+      ifelse(INTENTIE == 3,1,0),
+
+    TRAFFIC_BIKE =
+      ifelse(INTENTIE == 4,1,0),
+
+
     MOTORIZED_VEHICLE_CRASH =
       ifelse(INTENTIE %in% c(1,2),1,0),
+
 
     VIOLENCE =
       ifelse(INTENTIE %in% c(7,8,9),1,0),
 
 
+    OTHER_MECHANISM =
+      ifelse(
+        INTENTIE %in% c(12,13,14,15,18),
+        1,
+        0
+      ),
+
+
+    # Physiology
     SBP90 =
-      ifelse(RRSYSTOLISCH < 90,1,0),
+      ifelse(RRSYSTOLISCH <90,1,0),
 
 
     GCS =
@@ -234,34 +223,45 @@ analysis_population <- analysis_population %>%
 
 
     GCS14 =
-      ifelse(GCS < 14,1,0),
+      ifelse(GCS <14,1,0),
 
 
     RR1029 =
       ifelse(
-        ADEMFREQUENTIE < 10 |
-          ADEMFREQUENTIE > 29,
+        ADEMFREQUENTIE <10 |
+          ADEMFREQUENTIE >29,
         1,
         0
       ),
 
 
-    ISS16 =
-      ifelse(auto_ISS >=16,1,0),
-
-
+    # Age
     LEEFTIJD65 =
       ifelse(LEEFTIJDSEH >=65,1,0),
 
 
+    # Missing injury location indicator
+    GPSDATA_COMPLETE =
+      ifelse(
+        !is.na(GPSDATA),
+        1,
+        0
+      ),
+
+
+    # Outcome
     OVERLEDEN =
-      ifelse(is.na(OVERLEDEN),0,OVERLEDEN)
+      ifelse(
+        is.na(OVERLEDEN),
+        0,
+        OVERLEDEN
+      )
 
   )
 
 
 ############################################################
-# Save intermediate dataset
+# Save cleaned dataset
 ############################################################
 
 saveRDS(
@@ -269,7 +269,7 @@ saveRDS(
   here(
     "data",
     "processed",
-    "clean_dataset.rds"
+    "analysis_population.rds"
   )
 )
 
