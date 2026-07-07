@@ -1,8 +1,11 @@
+############################################################
+# Packages required for trauma IV analysis
+############################################################
+
 library(tidyverse)
-library(micemd)
 library(lubridate)
 library(geosphere)
 library(ivtools)
 library(rms)
-library(Amelia)
 library(tableone)
+library(micemd)
