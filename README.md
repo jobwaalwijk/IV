@@ -12,7 +12,7 @@ Patient-level data cannot be publicly shared due to privacy regulations.
 
 ## Requirements
 
-R version 4.x
+R version 4.3.3
 
 Required packages:
 
