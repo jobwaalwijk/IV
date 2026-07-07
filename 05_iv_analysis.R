@@ -1,245 +1,89 @@
-############################################################
-# Instrumental variable analysis
-#
-# Exposure:
-#   Direct admission to level I trauma center
-#
-# Instrument:
-#   Differential distance
-#
-# Outcome:
-#   30-day mortality
-#
-# Method:
-#   Two-stage  ivglm
-#
-############################################################
+###############################################################################
+# 05_iv_analysis.R
+# Instrumental variable analyses
+###############################################################################
 
+library(tidyverse)
+library(ivtools)
+library(micemd)
+library(rms)
 
-##############################
-# 0. Setup
-##############################
+#------------------------------------------------------------------------------
+# Load analysis dataset
+#------------------------------------------------------------------------------
 
-rm(list = ls())
+load("data/derived/imputed_dataset.rda")
 
-source("R/00_packages.R")
-source("R/config.R")
-
-
-
-##############################
-# 1. Load dataset
-##############################
-
-data <- readRDS(
-  file.path(
-    paths$output,
-    "dataset_with_instrument.rds"
-  )
-)
-
-
-
-##############################
-# 2. Study population
-##############################
-
-analysis_data <- data %>%
+analysis <- imputed_dataset %>%
   filter(
     auto_ISS >= 16,
+    GPSDATA_COMPLETE == 1,
     !is.na(DIFFERENTIAL_DISTANCE)
   )
 
+###############################################################################
+# Two-stage IV analysis
+###############################################################################
 
+iv_models <- vector("list", 30)
 
-##############################
-# 3. Function for IV analysis
-##############################
+for(i in 1:30){
 
-run_IV_analysis <- function(
-    dataset,
-    outcome_variable
-){
+  dat <- analysis %>%
+    filter(.imp == i)
 
+  fitX <- glm(
+    LEVEL1 ~ DIFFERENTIAL_DISTANCE +
+      LEEFTIJDSEH +
+      GESLACHTMAN +
+      auto_ISS,
+    family = binomial(),
+    data = dat
+  )
 
-  fit_first_stage <- list()
+  fitY <- glm(
+    OVERLEDEN ~
+      LEVEL1 +
+      LEEFTIJDSEH +
+      GESLACHTMAN +
+      auto_ISS,
+    family = binomial(),
+    data = dat
+  )
 
-  fit_second_stage <- list()
-
-  estimates <- NULL
-
-  standard_errors <- NULL
-
-
-
-  #################################
-  # Loop over imputed datasets
-  #################################
-
-  for(i in 1:30){
-
-
-    current_data <- dataset %>%
-      filter(.imp == i)
-
-
-
-    #################################
-    # First stage:
-    #
-    # Differential distance predicts
-    # admission to level I center
-    #################################
-
-    fit_first_stage[[i]] <-
-      glm(
-        LEVEL1 ~
-          DIFFERENTIAL_DISTANCE +
-          LEEFTIJDSEH +
-          GESLACHTMAN +
-          auto_ISS,
-
-        family = binomial,
-
-        data = current_data
-      )
-
-
-
-    #################################
-    # Second stage:
-    #
-    # Level I admission predicts
-    # mortality
-    #################################
-
-    fit_second_stage[[i]] <-
-      glm(
-        as.formula(
-          paste0(
-            outcome_variable,
-            " ~ LEVEL1 + ",
-            "LEEFTIJDSEH + ",
-            "GESLACHTMAN + ",
-            "auto_ISS"
-          )
-        ),
-
-        family = binomial,
-
-        data = current_data
-      )
-
-
-
-    #################################
-    # IV model
-    #################################
-
-    iv_model <-
-      ivtools::ivglm(
-        estmethod = "ts",
-
-        fitX.LZ =
-          fit_first_stage[[i]],
-
-        fitY.LX =
-          fit_second_stage[[i]],
-
-        data =
-          current_data
-      )
-
-
-
-    estimates <-
-      rbind(
-        estimates,
-        iv_model$est
-      )
-
-
-    standard_errors <-
-      rbind(
-        standard_errors,
-        sqrt(
-          diag(iv_model$vcov)
-        )
-      )
-
-
-  }
-
-
-
-  #################################
-  # Pool multiple imputations
-  #################################
-
-  pooled <-
-    mice::pool.scalar(
-      Q = estimates[,2],
-      U = standard_errors[,2]^2
-    )
-
-
-
-  result <-
-    data.frame(
-
-      estimate =
-        pooled$qbar,
-
-      standard_error =
-        pooled$tau,
-
-      CI_lower =
-        pooled$qbar -
-        1.96*pooled$tau,
-
-      CI_upper =
-        pooled$qbar +
-        1.96*pooled$tau
-
-    )
-
-
-  return(result)
+  iv_models[[i]] <- ivglm(
+    estmethod = "ts",
+    fitX.LZ = fitX,
+    fitY.LX = fitY,
+    data = dat,
+    clusterid = dat$REGIO
+  )
 
 }
 
+###############################################################################
+# Pool estimates
+###############################################################################
 
-
-##############################
-# 4. Run primary analysis
-##############################
-
-IV_30day_mortality <-
-
-  run_IV_analysis(
-    dataset = analysis_data,
-    outcome_variable = "OVERLEDEN30D"
-  )
-
-
-
-##############################
-# 5. Save output
-##############################
-
-write.csv(
-  IV_30day_mortality,
-
-  file.path(
-    paths$output,
-    "IV_primary_result.csv"
-  ),
-
-  row.names = FALSE
+mi.est <- do.call(
+  rbind,
+  lapply(iv_models, function(x) x$est)
 )
 
+mi.se <- do.call(
+  rbind,
+  lapply(iv_models, function(x) sqrt(diag(x$vcov)))
+)
 
+iv_results <- mi.meld(
+  q = mi.est,
+  se = mi.se
+)
 
-############################################################
-# End script
-############################################################
+iv_results$CI_lower <- iv_results$q.mi -
+  1.96 * iv_results$se.mi
+
+iv_results$CI_upper <- iv_results$q.mi +
+  1.96 * iv_results$se.mi
+
+print(iv_results)
