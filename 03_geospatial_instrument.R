@@ -1,120 +1,172 @@
 ############################################################
-# Creation of instrumental variable:
-# Differential distance
+# 03_geospatial_processing.R
 #
-# Description:
-# Calculates the distance from injury location to the nearest
-# level I trauma center and nearest lower-level trauma center.
+# Creation of differential distance instrumental variable
 #
-# Instrument:
-# Differential distance =
-# distance to nearest level I trauma center -
-# distance to nearest level II/III trauma center
+# Input:
+#   data/processed/imputed_dataset.rds
+#   postcode_coordinates.csv
+#   hospitals.csv
+#
+# Output:
+#   data/processed/analysis_dataset_iv.rds
 #
 ############################################################
 
 
-##############################
-# 0. Setup
-##############################
+############################################################
+# Load packages
+############################################################
 
-rm(list = ls())
-
-source("R/00_packages.R")
-source("R/config.R")
+source(here("R", "00_packages.R"))
 
 
 
-##############################
-# 1. Load imputed dataset
-##############################
+############################################################
+# Load data
+############################################################
+
 
 data <- readRDS(
-  file.path(
-    paths$output,
-    "multiple_imputed_dataset.rds"
+  here(
+    "data",
+    "processed",
+    "imputed_dataset.rds"
   )
 )
 
 
 
-##############################
-# 2. Load hospital coordinates
-##############################
+############################################################
+# Load postcode coordinates
+############################################################
 
-hospitals <- read.csv(
-  file.path(
-    paths$data,
-    "hospitals.csv"
-  )
-)
-
-
-# Required variables:
-# ID
-# Latitude
-# Longitude
-# Level
-
-
-hospitals <- hospitals %>%
-  select(
-    ID,
-    Latitude,
-    Longitude,
-    Level
-  )
-
-
-
-##############################
-# 3. Link injury location
-#    to coordinates
-##############################
-
-postcode_map <- read.csv(
-  file.path(
-    paths$data,
+postcode <- read_csv(
+  here(
+    "data",
+    "raw",
     "postcode_coordinates.csv"
   )
 )
 
 
-# Required variables:
-# Patient_Postcode
-# Patient_Latitude
-# Patient_Longitude
+postcode <- postcode %>%
+  transmute(
+    Patient_Postcode = postcode,
+    Patient_Latitude = latitude,
+    Patient_Longitude = longitude
+  ) %>%
+  distinct(
+    Patient_Postcode,
+    .keep_all = TRUE
+  )
 
+
+
+############################################################
+# Clean postcode variable
+############################################################
+
+data <- data %>%
+  mutate(
+
+    GPSDATA = str_replace_all(
+      GPSDATA,
+      "[^[:alnum:]]",
+      ""
+    ),
+
+    Patient_Postcode =
+      str_extract(
+        GPSDATA,
+        "^[0-9]{4}[A-Z]{2}$"
+      )
+
+  )
+
+
+
+############################################################
+# Add coordinates
+############################################################
 
 data <- data %>%
   left_join(
-    postcode_map,
+    postcode,
     by = "Patient_Postcode"
   )
 
 
 
-##############################
-# 4. Function calculating
-#    nearest hospital distance
-##############################
+############################################################
+# Load hospital data
+############################################################
 
-nearest_distance <- function(
-    latitude,
-    longitude,
+
+hospitals <- read_csv(
+  here(
+    "data",
+    "raw",
+    "hospitals.csv"
+  )
+)
+
+
+
+hospitals <- hospitals %>%
+  transmute(
+
+    ID,
+
+    Hospital,
+
+    Level,
+
+    Latitude,
+
+    Longitude
+
+  ) %>%
+  distinct(ID, .keep_all = TRUE)
+
+
+
+############################################################
+# Function: nearest hospital
+############################################################
+
+
+nearest_hospital_distance <- function(
+    lat,
+    lon,
     hospital_data
 ){
 
-  distances <- geosphere::distHaversine(
-    cbind(
-      hospital_data$Longitude,
-      hospital_data$Latitude
+  if(
+    is.na(lat) |
+    is.na(lon)
+  ){
+    return(NA)
+  }
+
+
+  distances <- distHaversine(
+
+    matrix(
+      c(
+        hospital_data$Longitude,
+        hospital_data$Latitude
+      ),
+      ncol = 2
     ),
+
     c(
-      longitude,
-      latitude
+      lon,
+      lat
     )
+
   )
+
 
   min(distances)
 
@@ -122,50 +174,58 @@ nearest_distance <- function(
 
 
 
-##############################
-# 5. Unique injury locations
-##############################
+############################################################
+# Calculate distance to nearest Level I
+############################################################
 
-unique_locations <- data %>%
-  filter(
-    !is.na(Patient_Latitude),
-    !is.na(Patient_Longitude)
-  ) %>%
-  distinct(
+
+level1 <- hospitals %>%
+  filter(Level == 1)
+
+
+
+level23 <- hospitals %>%
+  filter(Level %in% c(2,3))
+
+
+
+############################################################
+# Unique postcode calculation
+############################################################
+
+
+postcode_unique <- data %>%
+  select(
     Patient_Postcode,
     Patient_Latitude,
     Patient_Longitude
-  )
+  ) %>%
+  distinct()
 
 
 
-##############################
-# 6. Calculate distances
-##############################
+############################################################
+# Distance calculation
+############################################################
 
-unique_locations <- unique_locations %>%
+
+postcode_unique <- postcode_unique %>%
   rowwise() %>%
   mutate(
 
-    # nearest level I center
-
-    distance_level_I =
-      nearest_distance(
+    DIST_LEVEL1 =
+      nearest_hospital_distance(
         Patient_Latitude,
         Patient_Longitude,
-        hospitals %>%
-          filter(Level == 1)
+        level1
       ),
 
 
-    # nearest level II/III center
-
-    distance_level_II_III =
-      nearest_distance(
+    DIST_LEVEL23 =
+      nearest_hospital_distance(
         Patient_Latitude,
         Patient_Longitude,
-        hospitals %>%
-          filter(Level %in% c(2,3))
+        level23
       )
 
   ) %>%
@@ -173,55 +233,62 @@ unique_locations <- unique_locations %>%
 
 
 
-##############################
-# 7. Create instrumental
-#    variable
-##############################
+############################################################
+# Create instrumental variable
+############################################################
 
-unique_locations <- unique_locations %>%
+
+postcode_unique <- postcode_unique %>%
   mutate(
 
     DIFFERENTIAL_DISTANCE =
-      distance_level_I -
-      distance_level_II_III
+      DIST_LEVEL1 -
+      DIST_LEVEL23
 
   )
 
 
 
-##############################
-# 8. Merge instrument
-#    back to patient data
-##############################
+############################################################
+# Merge back
+############################################################
 
-data_IV <- data %>%
+
+data <- data %>%
   left_join(
-    unique_locations %>%
+
+    postcode_unique %>%
       select(
         Patient_Postcode,
-        distance_level_I,
-        distance_level_II_III,
+        DIST_LEVEL1,
+        DIST_LEVEL23,
         DIFFERENTIAL_DISTANCE
       ),
+
     by = "Patient_Postcode"
+
   )
 
 
 
-##############################
-# 9. Save
-##############################
+############################################################
+# Save
+############################################################
+
 
 saveRDS(
-  data_IV,
-  file.path(
-    paths$output,
-    "dataset_with_instrument.rds"
+
+  data,
+
+  here(
+    "data",
+    "processed",
+    "analysis_dataset_iv.rds"
   )
+
 )
 
 
-
-############################################################
-# End script
-############################################################
+message(
+  "Geospatial processing completed."
+)
