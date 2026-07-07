@@ -33,11 +33,3 @@ The analysis consists of:
 4. Descriptive analyses
 5. Instrumental variable analyses
 6. Sensitivity analyses
-
-## Running the analysis
-
-Execute:
-
-scripts/run_all_analysis.R
-
-after obtaining access to the DNTR dataset.
