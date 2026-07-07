@@ -1,172 +1,357 @@
 ############################################################
-# Baseline characteristics
+# 04_baseline_characteristics.R
 #
-# Generates:
-# - Table 1
-# - Supplementary Table: missing injury location comparison
+# Baseline characteristics and descriptive tables
+#
+# Input:
+#   data/processed/analysis_dataset_iv.rds
+#
+# Output:
+#   results/tables/
+#
 ############################################################
 
 
-library(tidyverse)
-library(tableone)
-library(mice)
+############################################################
+# Load packages
+############################################################
+
+source(here("R", "00_packages.R"))
+
 
 
 ############################################################
-# Load imputed dataset
+# Load data
 ############################################################
 
-load("data/processed/Baseline_mids.rda")
 
-
-############################################################
-# Complete dataset for descriptive statistics
-############################################################
-
-baseline <- complete(
-  Baseline_mids,
-  action = "long",
-  include = FALSE
+data <- readRDS(
+  here(
+    "data",
+    "processed",
+    "analysis_dataset_iv.rds"
+  )
 )
 
 
-############################################################
-# Study cohort
-############################################################
-
-baseline <- baseline %>%
-  filter(
-    auto_ISS >= 16,
-    GPSDATA_COMPLETE == 1,
-    !is.na(DIFFERENTIAL_DISTANCE)
-  )
-
 
 ############################################################
-# Derived variables
+# Select one imputed dataset for descriptive analyses
 ############################################################
+
+#
+# First row (.imp==0) contains original data
+# Imputed datasets are used for regression analyses
+#
+
+baseline <- data %>%
+  filter(.imp == 0)
+
+
+
+############################################################
+# Create derived variables
+############################################################
+
 
 baseline <- baseline %>%
   mutate(
 
-    HEADAIS3 = ifelse(AIS_1 >= 3,1,0),
-
-    THORAXAIS3 = ifelse(AIS_4 >= 3,1,0),
-
-    CRITICAL_INJURY = ifelse(auto_ISS >=25,1,0),
-
-    ELDERLY = ifelse(LEEFTIJDSEH >=65,1,0)
-
-  )
-
-
-
-############################################################
-# Table 1
-# Level I vs level II/III trauma centers
-############################################################
-
-
-vars <- c(
-  "LEEFTIJDSEH",
-  "GESLACHTMAN",
-  "ASA_CLASS",
-  "RRSYSTOLISCH",
-  "ADEMFREQUENTIE",
-  "GCS",
-  "auto_ISS",
-  "MOTORIZED_VEHICLE_CRASH",
-  "FALL_HIGH",
-  "VIOLENCE",
-  "HEADAIS3",
-  "THORAXAIS3",
-  "LEVEL1",
-  "OVERLEDEN30D"
-)
-
-
-factorVars <- c(
-  "GESLACHTMAN",
-  "ASA_CLASS",
-  "MOTORIZED_VEHICLE_CRASH",
-  "FALL_HIGH",
-  "VIOLENCE",
-  "HEADAIS3",
-  "THORAXAIS3",
-  "LEVEL1",
-  "OVERLEDEN30D"
-)
-
-
-table1 <- CreateTableOne(
-  vars = vars,
-  factorVars = factorVars,
-  strata = "LEVEL1",
-  data = baseline,
-  test = FALSE
-)
-
-
-table1_output <- print(
-  table1,
-  smd = TRUE,
-  nonnormal = TRUE
-)
-
-
-write.table(
-  table1_output,
-  "results/tables/Table1_baseline_characteristics.csv",
-  sep=";",
-  dec=","
-)
-
-
-
-############################################################
-# Supplementary Table:
-# patients with vs without injury location
-############################################################
-
-
-location_comparison <- complete(
-  Baseline_mids,
-  action="long",
-  include=FALSE
-)
-
-
-location_comparison <- location_comparison %>%
-  mutate(
-    LOCATION_AVAILABLE =
+    GPS_COMPLETE =
       ifelse(
-        GPSDATA_COMPLETE==1 &
         !is.na(DIFFERENTIAL_DISTANCE),
         1,
         0
+      ),
+
+
+    LEVEL_GROUP =
+      ifelse(
+        LEVEL1 == 1,
+        "Level I",
+        "Level II/III"
+      ),
+
+
+    ISS16 =
+      ifelse(
+        auto_ISS >=16,
+        1,
+        0
+      ),
+
+
+    HEADAIS3 =
+      ifelse(
+        AIS_1 >=3,
+        1,
+        0
+      ),
+
+
+    THORAXAIS3 =
+      ifelse(
+        AIS_4 >=3,
+        1,
+        0
+      ),
+
+
+    SEVERE_LOWER_EXTREMITY =
+      ifelse(
+        AIS_8 >=3,
+        1,
+        0
       )
+
   )
 
 
-supp_table <- CreateTableOne(
-  vars = vars,
-  factorVars = factorVars,
-  strata = "LOCATION_AVAILABLE",
-  data = location_comparison,
-  test = FALSE
+
+############################################################
+# Variables for Table 1
+############################################################
+
+
+vars_table1 <- c(
+
+  "LEEFTIJDSEH",
+
+  "GESLACHTMAN",
+
+  "ASA",
+
+  "RRSYSTOLISCH",
+
+  "ADEMFREQUENTIE",
+
+  "GCS",
+
+  "auto_ISS",
+
+  "ISS16",
+
+  "TRAFFIC",
+
+  "MOTORIZED_VEHICLE_CRASH",
+
+  "FALL",
+
+  "VIOLENCE",
+
+  "COMORB",
+
+  "ECRU",
+
+  "LEVEL1",
+
+  "OVERLEDEN30D"
+
 )
 
 
-supp_output <- print(
-  supp_table,
+
+factor_vars <- c(
+
+  "GESLACHTMAN",
+
+  "ISS16",
+
+  "TRAFFIC",
+
+  "MOTORIZED_VEHICLE_CRASH",
+
+  "FALL",
+
+  "VIOLENCE",
+
+  "COMORB",
+
+  "ECRU",
+
+  "LEVEL1",
+
+  "OVERLEDEN30D"
+
+)
+
+
+
+############################################################
+# Table 1 overall population
+############################################################
+
+
+table1 <- CreateTableOne(
+
+  vars = vars_table1,
+
+  factorVars = factor_vars,
+
+  data = baseline
+
+)
+
+
+
+table1_output <- print(
+
+  table1,
+
   smd = TRUE,
+
   nonnormal = TRUE
+
 )
+
 
 
 write.table(
-  supp_output,
-  "results/tables/Supplementary_Table_location_missing.csv",
-  sep=";",
-  dec=","
+
+  table1_output,
+
+  here(
+    "results",
+    "tables",
+    "Table1_baseline.csv"
+  ),
+
+  sep = ";",
+
+  dec = ","
+
+)
+
+
+
+############################################################
+# Missing injury location comparison
+############################################################
+
+
+gps_comparison <- CreateTableOne(
+
+  vars = vars_table1,
+
+  factorVars = factor_vars,
+
+  strata = "GPS_COMPLETE",
+
+  data = baseline,
+
+  test = FALSE
+
+)
+
+
+
+gps_output <- print(
+
+  gps_comparison,
+
+  smd = TRUE,
+
+  nonnormal = TRUE
+
+)
+
+
+
+write.table(
+
+  gps_output,
+
+  here(
+    "results",
+    "tables",
+    "Supplementary_Table_GPS_missing.csv"
+  ),
+
+  sep = ";",
+
+  dec = ","
+
+)
+
+
+
+############################################################
+# Level I vs Level II/III characteristics
+############################################################
+
+
+level_comparison <- CreateTableOne(
+
+  vars = vars_table1,
+
+  factorVars = factor_vars,
+
+  strata = "LEVEL_GROUP",
+
+  data = baseline,
+
+  test = FALSE
+
+)
+
+
+
+level_output <- print(
+
+  level_comparison,
+
+  smd = TRUE,
+
+  nonnormal = TRUE
+
+)
+
+
+
+write.table(
+
+  level_output,
+
+  here(
+    "results",
+    "tables",
+    "Table_Level_I_vs_Level_IIIII.csv"
+  ),
+
+  sep = ";",
+
+  dec = ","
+
+)
+
+
+
+############################################################
+# Save summary objects
+############################################################
+
+
+saveRDS(
+
+  list(
+
+    table1 = table1_output,
+
+    gps = gps_output,
+
+    level = level_output
+
+  ),
+
+  here(
+    "results",
+    "tables",
+    "baseline_tables.rds"
+  )
+
+)
+
+
+message(
+  "Baseline characteristics completed."
 )
