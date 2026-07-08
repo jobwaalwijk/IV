@@ -37,14 +37,11 @@ R/00_packages.R
 The main packages include:
 
 - tidyverse
-- here
-- mice
 - micemd
 - ivtools
 - rms
-- geosphere
 - tableone
-- Amelia
+- geosphere
 
 ## Repository structure
 
