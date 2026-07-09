@@ -42,6 +42,7 @@ The main packages include:
 - rms
 - tableone
 - geosphere
+- splines
 
 ## Repository structure
 
