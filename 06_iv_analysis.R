@@ -124,7 +124,7 @@ for(i in 1:30){
 
       DIFFERENTIAL_DISTANCE +
 
-      LEEFTIJDSEH +
+       rcs(LEEFTIJDSEH, 3) +
 
       GESLACHTMAN +
 
@@ -154,7 +154,7 @@ for(i in 1:30){
 
       LEVEL1 +
 
-      LEEFTIJDSEH +
+      rcs(LEEFTIJDSEH, 3) +
 
       GESLACHTMAN +
 
@@ -290,7 +290,7 @@ first_stage <- glm(
 
     DIFFERENTIAL_DISTANCE +
 
-    LEEFTIJDSEH +
+    rcs(LEEFTIJDSEH, 3) +
 
     GESLACHTMAN +
 
