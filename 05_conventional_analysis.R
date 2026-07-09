@@ -110,7 +110,7 @@ model_adjusted <- glm(
 
     LEVEL1 +
 
-    LEEFTIJDSEH +
+    rcs(LEEFTIJDSEH, 3) +
 
     SEX +
 
