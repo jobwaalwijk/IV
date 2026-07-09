@@ -124,11 +124,11 @@ for(i in 1:30){
 
       DIFFERENTIAL_DISTANCE +
 
-       rcs(LEEFTIJDSEH, 3) +
+      rcs(LEEFTIJDSEH, 3) +
 
       GESLACHTMAN +
 
-      auto_ISS,
+      rcs(auto_ISS,3 ),
 
 
     family = binomial,
@@ -158,7 +158,7 @@ for(i in 1:30){
 
       GESLACHTMAN +
 
-      auto_ISS,
+      rcs(auto_ISS,3 ),
 
 
     family = binomial,
@@ -294,7 +294,7 @@ first_stage <- glm(
 
     GESLACHTMAN +
 
-    auto_ISS,
+    rcs(auto_ISS,3 ),
 
 
   family = binomial,
