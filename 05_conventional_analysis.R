@@ -110,7 +110,7 @@ model_adjusted <- glm(
 
     LEVEL1 +
 
-    rcs(LEEFTIJDSEH, 3) +
+    rcs(LEEFTIJDSEH, 4) +
 
     SEX +
 
@@ -122,7 +122,7 @@ model_adjusted <- glm(
 
     GCS +
 
-    auto_ISS +
+    rcs(auto_ISS, 4) + 
 
     MECHANISM,
 
