@@ -124,11 +124,11 @@ for(i in 1:30){
 
       DIFFERENTIAL_DISTANCE +
 
-      rcs(LEEFTIJDSEH, 3) +
+      rcs(LEEFTIJDSEH, 4) +
 
       GESLACHTMAN +
 
-      rcs(auto_ISS,3 ),
+      rcs(auto_ISS, 4),
 
 
     family = binomial,
@@ -154,11 +154,11 @@ for(i in 1:30){
 
       LEVEL1 +
 
-      rcs(LEEFTIJDSEH, 3) +
+      rcs(LEEFTIJDSEH, 4) +
 
       GESLACHTMAN +
 
-      rcs(auto_ISS,3 ),
+      rcs(auto_ISS, 4),
 
 
     family = binomial,
@@ -290,11 +290,11 @@ first_stage <- glm(
 
     DIFFERENTIAL_DISTANCE +
 
-    rcs(LEEFTIJDSEH, 3) +
+    rcs(LEEFTIJDSEH, 4) +
 
     GESLACHTMAN +
 
-    rcs(auto_ISS,3 ),
+    rcs(auto_ISS, 4),
 
 
   family = binomial,
