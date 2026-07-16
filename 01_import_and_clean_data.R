@@ -57,10 +57,10 @@ db <- db %>%
              0,
              LETSELAARDWAARDEID),
 
-    MMT =
-      ifelse(is.na(MMT),
+    MMT_ =
+      ifelse(is.na(MMT_),
              0,
-             MMT),
+             MMT_),
 
     INTERVENTIETYPE =
       ifelse(is.na(INTERVENTIETYPE),
