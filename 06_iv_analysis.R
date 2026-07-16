@@ -1,41 +1,11 @@
 ############################################################
 # 06_iv_analysis.R
-#
-# Instrumental variable analysis
-#
-# Instrument:
-#   Differential distance
-#
-# Exposure:
-#   Level I trauma center admission
-#
-# Outcome:
-#   30-day mortality
-#
-# Clustering:
-#   Trauma region
-#
-# Input:
-#   data/processed/analysis_dataset_iv.rds
-#
-# Output:
-#   results/models/iv_analysis.rds
-#
-############################################################
 
-
-############################################################
 # Load packages
-############################################################
 
 source(here("R", "00_packages.R"))
 
-
-
-############################################################
 # Load data
-############################################################
-
 
 data <- readRDS(
   here(
@@ -46,15 +16,7 @@ data <- readRDS(
 )
 
 
-
-############################################################
 # Select IV population
-############################################################
-
-#
-# Severe trauma population
-# ISS >=16
-#
 
 iv_data <- data %>%
 
@@ -68,37 +30,42 @@ iv_data <- data %>%
 
     !is.na(LEVEL1),
 
-    !is.na(OVERLEDEN30D)
+    !is.na(OVERLEDEN30D),
+
+    !is.na(TRAUMAREGIO)
+
+  ) %>%
+
+  mutate(
+
+    SEX =
+      factor(
+        GESLACHTMAN
+      )
 
   )
 
 
-
-############################################################
-# Store results
-############################################################
-
+# Storage objects
 
 iv_models <- list()
 
-estimates <- list()
+iv_estimates <- list()
 
-ses <- list()
+iv_SE <- list()
+
+first_stage_info <- list()
 
 
 
-############################################################
-# Run IV model in each imputed dataset
-############################################################
-
+# Run IV analysis in each imputed dataset
 
 for(i in 1:30){
 
 
-  cat(
-    "Running imputation:",
-    i,
-    "\n"
+  message(
+    "Running imputation ",
+    i
   )
 
 
@@ -108,15 +75,16 @@ for(i in 1:30){
       .imp == i
     )
 
+  # Restricted cubic spline setup
+
+  dd <- datadist(dat_i)
+
+  options(
+    datadist = "dd"
+  )
 
 
-  ##########################################################
-  # First stage:
-  #
-  # Probability of Level I admission
-  #
-  ##########################################################
-
+  # First stage
 
   fitX <- glm(
 
@@ -124,11 +92,17 @@ for(i in 1:30){
 
       DIFFERENTIAL_DISTANCE +
 
-      rcs(LEEFTIJDSEH, 4) +
+      rcs(
+        LEEFTIJDSEH,
+        4
+      ) +
 
-      GESLACHTMAN +
+      SEX +
 
-      rcs(auto_ISS, 4),
+      rcs(
+        auto_ISS,
+        4
+      ),
 
 
     family = binomial,
@@ -139,14 +113,7 @@ for(i in 1:30){
   )
 
 
-
-  ##########################################################
-  # Second stage:
-  #
-  # Mortality model
-  #
-  ##########################################################
-
+# Second stage
 
   fitY <- glm(
 
@@ -154,11 +121,17 @@ for(i in 1:30){
 
       LEVEL1 +
 
-      rcs(LEEFTIJDSEH, 4) +
+      rcs(
+        LEEFTIJDSEH,
+        4
+      ) +
 
-      GESLACHTMAN +
+      SEX +
 
-      rcs(auto_ISS, 4),
+      rcs(
+        auto_ISS,
+        4
+      ),
 
 
     family = binomial,
@@ -168,42 +141,33 @@ for(i in 1:30){
 
   )
 
-
-
-  ##########################################################
-  # IV model
-  ##########################################################
-
-
+  # Instrumental variable model
   iv_models[[i]] <-
 
     ivglm(
 
       estmethod = "ts",
 
-
       fitX.LZ = fitX,
-
 
       fitY.LX = fitY,
 
-
       data = dat_i,
-
 
       clusterid = "TRAUMAREGIO"
 
     )
 
 
+# Store estimates
 
-  estimates[[i]] <-
+  iv_estimates[[i]] <-
 
     iv_models[[i]]$est
 
 
 
-  ses[[i]] <-
+  iv_SE[[i]] <-
 
     sqrt(
       diag(
@@ -211,61 +175,69 @@ for(i in 1:30){
       )
     )
 
-}
-
-
-
-############################################################
 # Pool estimates across imputations
-############################################################
-
 
 estimates <- do.call(
   rbind,
-  estimates
+  iv_estimates
 )
 
 
 ses <- do.call(
   rbind,
-  ses
+  iv_SE
 )
 
 
 
-iv_results <-
+iv_results <- mitools::MIcombine(
 
-  mi.meld(
+  results = estimates,
 
-    q = estimates,
+  variances = ses^2
 
-    se = ses
-
-  )
+)
 
 
+# Convert IV estimates to OR and CI
 
-############################################################
-# Confidence intervals
-############################################################
+iv_table <- data.frame(
+
+  Variable =
+    names(iv_results$coefficients),
 
 
-iv_results <- iv_results %>%
+  Estimate =
+    iv_results$coefficients,
+
+
+  SE =
+    sqrt(
+      diag(
+        iv_results$variance
+      )
+    )
+
+)
+
+
+
+iv_table <- iv_table %>%
 
   mutate(
 
     CI_lower =
-      q.mi -
-      1.96*se.mi,
+      Estimate -
+      1.96 * SE,
 
 
     CI_upper =
-      q.mi +
-      1.96*se.mi,
+      Estimate +
+      1.96 * SE,
 
 
     OR =
-      exp(q.mi),
+      exp(Estimate),
 
 
     OR_lower =
@@ -276,103 +248,3 @@ iv_results <- iv_results %>%
       exp(CI_upper)
 
   )
-
-
-
-############################################################
-# First stage instrument strength
-############################################################
-
-
-first_stage <- glm(
-
-  LEVEL1 ~
-
-    DIFFERENTIAL_DISTANCE +
-
-    rcs(LEEFTIJDSEH, 4) +
-
-    GESLACHTMAN +
-
-    rcs(auto_ISS, 4),
-
-
-  family = binomial,
-
-
-  data =
-    iv_data %>%
-    filter(.imp==1)
-
-)
-
-
-
-wald_test <- summary(first_stage)$coefficients[
-
-  "DIFFERENTIAL_DISTANCE",
-
-  "z value"
-
-]^2
-
-
-
-############################################################
-# Save results
-############################################################
-
-
-saveRDS(
-
-  list(
-
-    iv_models = iv_models,
-
-    pooled_results = iv_results,
-
-    first_stage_wald = wald_test
-
-
-  ),
-
-
-  here(
-
-    "results",
-
-    "models",
-
-    "iv_analysis.rds"
-
-  )
-
-)
-
-
-
-write.csv(
-
-  iv_results,
-
-
-  here(
-
-    "results",
-
-    "tables",
-
-    "IV_results.csv"
-
-  ),
-
-
-  row.names = FALSE
-
-)
-
-
-
-message(
-  "IV analysis completed with clustering by trauma region."
-)
