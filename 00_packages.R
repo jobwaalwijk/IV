@@ -1,7 +1,4 @@
-############################################################
-# Packages required for trauma IV analysis
-############################################################
-
+# Packages required
 library(tidyverse)
 library(lubridate)
 library(geosphere)
