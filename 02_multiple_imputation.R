@@ -1,22 +1,8 @@
-############################################################
 # 02_multiple_imputation.R
-#
 # Multilevel multiple imputation of missing covariates
 # Accounting for clustering within Dutch trauma regions
-#
-# Input:
-#   data/processed/clean_dataset.rds
-#
-# Output:
-#   data/processed/imputed_dataset.rds
-#
-############################################################
 
-
-############################################################
-# Load packages
-############################################################
-
+# Packages
 source(here("R", "00_packages.R"))
 
 
@@ -28,36 +14,17 @@ data <- readRDS(
   here(
     "data",
     "processed",
-    "clean_dataset.rds"
+    "analysis_population.rds"
   )
 )
 
-
-
-############################################################
-# Define trauma region clustering variable
-############################################################
-
-# TRAUMAREGIO should contain the 11 Dutch trauma regions
-# If the variable has another name in DNTR, rename here
-
+# Clustering variable
 data <- data %>%
   mutate(
-    TRAUMAREGIO = as.factor(TRAUMAREGIO)
+    REGIO = factor(REGIO)
   )
 
-
-############################################################
-# Select variables for imputation
-############################################################
-
-#
-# Variables not imputed:
-# - identifiers
-# - outcomes
-# - exposure
-# - instrumental variable components
-#
+# Variables not included in imputation
 
 id_vars <- c(
   "ID",
@@ -70,69 +37,35 @@ id_vars <- c(
 
 analysis_vars <- data %>%
   select(
-    -all_of(id_vars)
+    -any_of(id_vars)
   )
 
-
-############################################################
-# Prepare predictor matrix
-############################################################
-
-# micemd uses a predictor matrix similar to mice
-# Positive values indicate predictors
-#
-# Trauma region is included as clustering variable
-#
+# Predictor matrix
 
 pred <- make.predictorMatrix(
   analysis_vars
 )
 
+# Reset predictor matrix
 
-############################################################
-# Remove variables that should not predict others
-############################################################
+pred[,] <- 0
 
-pred[, "ID"] <- 0
-pred[, "IDAABA"] <- 0
-
-
-
-############################################################
-# Specify multilevel structure
-############################################################
-
-#
-# In micemd:
-# -2 = cluster variable
-#  1 = predictor
-#  0 = not used
-#
-
-pred[, "TRAUMAREGIO"] <- -2
-
-
-
-############################################################
-# Variables included in imputation model
-############################################################
-
-# Important clinical predictors
+# Variables used in imputation model
 
 predictors <- c(
 
-  # demographics
+  # Demographics
   "LEEFTIJDSEH",
   "GESLACHTMAN",
 
-  # physiology
+  # Physiology
   "RRSYSTOLISCH",
   "ADEMFREQUENTIE",
   "EYEOPENINGWAARDEID",
   "MOTORRESPONSEWAARDEID",
   "VERBALRESPONSEWAARDEID",
 
-  # injury severity
+  # Injury severity
   "auto_ISS",
   "AIS_1",
   "AIS_2",
@@ -144,105 +77,115 @@ predictors <- c(
   "AIS_8",
   "AIS_9",
 
-  # mechanism
+  # Mechanism
   "INTENTIE",
 
-  # comorbidity
+  # Comorbidity
   "COMORB",
 
-  # treatment indicators
-  "MMT",
+  # Prehospital treatment
+  "MMT_",
   "INTUBATIEPREHOSP",
 
-  # cluster
-  "TRAUMAREGIO"
+  # Cluster
+  "REGIO"
 
 )
 
 
+predictors <- predictors[
+  predictors %in% names(analysis_vars)
+]
 
-############################################################
-# Restrict predictor matrix
-############################################################
-
-pred[,] <- 0
 
 pred[predictors, predictors] <- 1
 
+# Specify cluster variable
 
-# cluster variable
+pred[, "REGIO"] <- -2
 
-pred[, "TRAUMAREGIO"] <- -2
-
-
-
-############################################################
-# Define imputation methods
-############################################################
+# Imputation methods
 
 method <- make.method(
   analysis_vars
 )
 
-
-#
 # Continuous variables
-#
 
-method[c(
+continuous_vars <- c(
   "LEEFTIJDSEH",
   "RRSYSTOLISCH",
   "ADEMFREQUENTIE",
   "auto_ISS"
-)] <- "2l.norm"
+)
+
+method[continuous_vars] <- "2l.norm"
 
 
-#
-# Binary variables
-#
+
+# Binary variable
 
 binary_vars <- c(
   "GESLACHTMAN",
   "COMORB",
   "INTUBATIEPREHOSP",
-  "MMT",
-  "OVERLEDEN",
-  "ISS16"
+  "MMT_"
 )
+
+
+binary_vars <- binary_vars[
+  binary_vars %in% names(analysis_vars)
+]
 
 
 method[binary_vars] <- "2l.bin"
 
 
+# Do not impute derived variables or outcomes
 
-############################################################
-# Run multilevel multiple imputation
-############################################################
+no_impute <- c(
+  "OVERLEDEN",
+  "ISS16",
+  "AIS_1_3",
+  "AIS_2_3",
+  "AIS_3_3",
+  "AIS_4_3",
+  "AIS_5_3",
+  "AIS_6_3",
+  "AIS_7_3",
+  "AIS_8_3",
+  "AIS_9_3",
+  "SBP90",
+  "GCS14",
+  "RR1029",
+  "ECRU",
+  "SPOEDINTERVENTIE",
+  "SEH_ICU"
+)
+
+no_impute <- no_impute[
+  no_impute %in% names(method)
+]
+
+method[no_impute] <- ""
+
+
+# Multiple imputation
 
 set.seed(2025)
 
 
 imputed <- mice(
-  
   analysis_vars,
-  
   m = 30,
-  
   maxit = 10,
-  
   predictorMatrix = pred,
-  
   method = method,
-  
   printFlag = TRUE
-  
 )
 
 
-
-############################################################
 # Convert to long format
-############################################################
 
 imputed_long <- complete(
   imputed,
@@ -251,25 +194,18 @@ imputed_long <- complete(
 )
 
 
-
-############################################################
 # Add identifiers back
-############################################################
 
 imputed_long <- data %>%
   select(
-    all_of(id_vars)
+    any_of(id_vars)
   ) %>%
   bind_cols(
     imputed_long
   )
 
 
-
-############################################################
 # Save
-############################################################
-
 
 saveRDS(
   imputed_long,
@@ -278,11 +214,4 @@ saveRDS(
     "processed",
     "imputed_dataset.rds"
   )
-)
-
-
-message(
-  "Multiple imputation completed: ",
-  30,
-  " datasets created with clustering by trauma region."
 )
