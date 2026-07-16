@@ -1,4 +1,3 @@
-############################################################
 # 05_conventional_analysis.R
 #
 # Conventional logistic regression analysis
@@ -9,27 +8,16 @@
 # Outcome:
 #   30-day mortality
 #
-# Input:
-#   data/processed/analysis_dataset_iv.rds
-#
-# Output:
-#   results/models/conventional_analysis.rds
-#
-############################################################
 
 
-############################################################
 # Load packages
-############################################################
+
 
 source(here("R", "00_packages.R"))
 
 
 
-############################################################
 # Load data
-############################################################
-
 
 data <- readRDS(
   here(
@@ -40,10 +28,7 @@ data <- readRDS(
 )
 
 
-
-############################################################
 # Select complete cases for conventional analysis
-############################################################
 
 analysis <- data %>%
 
@@ -58,40 +43,109 @@ analysis <- data %>%
   )
 
 
+# Check required variables
 
-############################################################
-# Define analysis variables
-############################################################
+required_vars <- c(
 
+  "LEVEL1",
+  "OVERLEDEN30D",
+  "LEEFTIJDSEH",
+  "GESLACHTMAN",
+  "ASA",
+  "RRSYSTOLISCH",
+  "ADEMFREQUENTIE",
+  "GCS",
+  "auto_ISS",
+  "INTENTIE"
+
+)
+
+
+missing_vars <- setdiff(
+  required_vars,
+  names(analysis)
+)
+
+
+if(length(missing_vars) > 0){
+
+  stop(
+    paste(
+      "Missing variables:",
+      paste(
+        missing_vars,
+        collapse = ", "
+      )
+    )
+  )
+
+}
+
+
+# Create analysis variables
 
 analysis <- analysis %>%
 
   mutate(
 
-    MECHANISM =
-      factor(
-        INTENTIE
-      ),
-
     SEX =
       factor(
         GESLACHTMAN
+      ),
+
+
+    ASA =
+      factor(
+        ASA
+      ),
+
+
+    MECHANISM =
+      factor(
+        INTENTIE
       )
 
   )
 
 
+# Define rms distribution object
 
-############################################################
-# Unadjusted model
-############################################################
+dd <- datadist(
+  analysis
+)
 
+options(
+  datadist = "dd"
+)
+
+
+# Descriptive information
+
+message(
+  "Complete case population: ",
+  nrow(analysis)
+)
+
+
+message(
+  "Number of deaths: ",
+  sum(
+    analysis$OVERLEDEN30D
+  )
+)
+
+
+# Unadjusted logistic regression
 
 model_unadjusted <- glm(
 
-  OVERLEDEN30D ~ LEVEL1,
+  OVERLEDEN30D ~
+
+    LEVEL1,
+
 
   family = binomial,
+
 
   data = analysis
 
@@ -99,10 +153,7 @@ model_unadjusted <- glm(
 
 
 
-############################################################
-# Adjusted model
-############################################################
-
+# Adjusted logistic regression
 
 model_adjusted <- glm(
 
@@ -110,7 +161,10 @@ model_adjusted <- glm(
 
     LEVEL1 +
 
-    rcs(LEEFTIJDSEH, 4) +
+    rcs(
+      LEEFTIJDSEH,
+      4
+    ) +
 
     SEX +
 
@@ -122,7 +176,10 @@ model_adjusted <- glm(
 
     GCS +
 
-    rcs(auto_ISS, 4) + 
+    rcs(
+      auto_ISS,
+      4
+    ) +
 
     MECHANISM,
 
@@ -135,57 +192,64 @@ model_adjusted <- glm(
 )
 
 
-
-############################################################
-# Extract odds ratios
-############################################################
-
+# Extract odds ratios and confidence intervals
 
 extract_OR <- function(model){
 
   est <- summary(model)$coefficients
 
 
-  output <- data.frame(
+  data.frame(
 
-    Variable = rownames(est),
+    Variable =
+      rownames(est),
 
-    OR = exp(est[,1]),
+
+    OR =
+      exp(est[,1]),
+
 
     CI_lower =
-      exp(est[,1] -
-            1.96*est[,2]),
+      exp(
+        est[,1] -
+          1.96 * est[,2]
+      ),
+
 
     CI_upper =
-      exp(est[,1] +
-            1.96*est[,2]),
+      exp(
+        est[,1] +
+          1.96 * est[,2]
+      ),
+
 
     p =
-      est[,4]
+      est[,4],
+
+
+    row.names = NULL
 
   )
-
-
-  return(output)
 
 }
 
 
 
 OR_unadjusted <-
-  extract_OR(model_unadjusted)
 
+  extract_OR(
+    model_unadjusted
+  )
 
 
 OR_adjusted <-
-  extract_OR(model_adjusted)
+
+  extract_OR(
+    model_adjusted
+  )
 
 
-
-############################################################
-# Save results
-############################################################
-
+# Save tables
 
 write.csv(
 
@@ -218,10 +282,14 @@ write.csv(
 )
 
 
+# Save models
+
 
 saveRDS(
 
   list(
+
+    analysis_population = analysis,
 
     unadjusted = model_unadjusted,
 
@@ -239,10 +307,4 @@ saveRDS(
     "conventional_analysis.rds"
   )
 
-)
-
-
-
-message(
-  "Conventional logistic regression completed."
 )
