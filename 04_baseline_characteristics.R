@@ -1,30 +1,13 @@
-############################################################
 # 04_baseline_characteristics.R
 #
 # Baseline characteristics and descriptive tables
-#
-# Input:
-#   data/processed/analysis_dataset_iv.rds
-#
-# Output:
-#   results/tables/
-#
-############################################################
 
-
-############################################################
 # Load packages
-############################################################
-
 source(here("R", "00_packages.R"))
 
 
 
-############################################################
 # Load data
-############################################################
-
-
 data <- readRDS(
   here(
     "data",
@@ -34,12 +17,8 @@ data <- readRDS(
 )
 
 
+# Select one imputed dataset for descriptive analyse
 
-############################################################
-# Select one imputed dataset for descriptive analyses
-############################################################
-
-#
 # First row (.imp==0) contains original data
 # Imputed datasets are used for regression analyses
 #
@@ -49,10 +28,7 @@ baseline <- data %>%
 
 
 
-############################################################
 # Create derived variables
-############################################################
-
 
 baseline <- baseline %>%
   mutate(
@@ -106,12 +82,7 @@ baseline <- baseline %>%
 
   )
 
-
-
-############################################################
 # Variables for Table 1
-############################################################
-
 
 vars_table1 <- c(
 
@@ -176,10 +147,7 @@ factor_vars <- c(
 )
 
 
-
-############################################################
 # Table 1 overall population
-############################################################
 
 
 table1 <- CreateTableOne(
@@ -223,10 +191,7 @@ write.table(
 )
 
 
-
-############################################################
 # Missing injury location comparison
-############################################################
 
 
 gps_comparison <- CreateTableOne(
@@ -274,10 +239,7 @@ write.table(
 )
 
 
-
-############################################################
 # Level I vs Level II/III characteristics
-############################################################
 
 
 level_comparison <- CreateTableOne(
@@ -325,11 +287,7 @@ write.table(
 )
 
 
-
-############################################################
 # Save summary objects
-############################################################
-
 
 saveRDS(
 
@@ -349,9 +307,4 @@ saveRDS(
     "baseline_tables.rds"
   )
 
-)
-
-
-message(
-  "Baseline characteristics completed."
 )
