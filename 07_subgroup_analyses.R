@@ -1,163 +1,289 @@
-############################################################
 # 07_subgroup_analyses.R
-#
-# Prespecified subgroup analyses
-#
-# Subgroups:
-#   1. Elderly patients (age ≥65 years)
-#   2. Traumatic brain injury (AIS Head ≥3)
-#   3. Critical injuries (ISS ≥25)
-#
-# Output:
-#   results/subgroup_results.csv
-#
-############################################################
 
 source(here("R", "00_packages.R"))
 
-############################################################
-# Load dataset
-############################################################
 
-Baseline <- readRDS(
-  here("data", "processed", "baseline_dataset.rds")
+# Load imputed IV dataset
+
+data <- readRDS(
+  here(
+    "data",
+    "processed",
+    "analysis_dataset_iv.rds"
+  )
 )
 
-############################################################
-# Complete imputed datasets
-############################################################
 
-Baseline_IV <- complete(
-  Baseline,
-  action = "long",
-  include = FALSE
-)
+# Select IV population
 
-############################################################
-# Create subgroup variables
-############################################################
+data <- data %>%
 
-Baseline_IV <- Baseline_IV %>%
+  filter(
+
+    .imp > 0,
+
+    auto_ISS >=16,
+
+    !is.na(DIFFERENTIAL_DISTANCE),
+
+    !is.na(LEVEL1),
+
+    !is.na(OVERLEDEN30D),
+
+    !is.na(TRAUMAREGIO)
+
+  ) %>%
+
   mutate(
 
-    ELDERLY =
-      ifelse(LEEFTIJDSEH >= 65, 1, 0),
-
-    TBI =
-      ifelse(AIS_1 >= 3, 1, 0),
-
-    CRITICAL_INJURY =
-      ifelse(auto_ISS >= 25, 1, 0)
+    SEX =
+      factor(GESLACHTMAN)
 
   )
 
-############################################################
-# Function for IV analysis
-############################################################
+# Create subgroup variables
 
-run_iv <- function(data){
+data <- data %>%
 
-  fits <- vector("list",30)
+  mutate(
+
+    ELDERLY =
+      ifelse(
+        LEEFTIJDSEH >=65,
+        1,
+        0
+      ),
+
+
+    TBI =
+      ifelse(
+        AIS_1 >=3,
+        1,
+        0
+      ),
+
+
+    CRITICAL_INJURY =
+      ifelse(
+        auto_ISS >=25,
+        1,
+        0
+      )
+
+  )
+
+
+# IV function
+
+run_iv <- function(dataset){
+
+
+  estimates <- list()
+
+  ses <- list()
+
+
 
   for(i in 1:30){
 
-    dat <- filter(data,.imp==i)
+
+    dat <- dataset %>%
+
+      filter(
+        .imp==i
+      )
+
+
+    dd <- datadist(dat)
+
+    options(
+      datadist="dd"
+    )
+
+
 
     fitX <- glm(
-      LEVEL1 ~ DIFFERENTIAL_DISTANCE +
-        LEEFTIJDSEH +
-        GESLACHTMAN +
-        auto_ISS,
+
+      LEVEL1 ~
+
+        DIFFERENTIAL_DISTANCE +
+
+        rcs(
+          LEEFTIJDSEH,
+          4
+        ) +
+
+        SEX +
+
+        rcs(
+          auto_ISS,
+          4
+        ),
+
+
       family=binomial,
+
+
       data=dat
+
     )
+
+
 
     fitY <- glm(
-      OVERLEDEN30D ~ LEVEL1 +
-        LEEFTIJDSEH +
-        GESLACHTMAN +
-        auto_ISS,
+
+      OVERLEDEN30D ~
+
+        LEVEL1 +
+
+        rcs(
+          LEEFTIJDSEH,
+          4
+        ) +
+
+        SEX +
+
+        rcs(
+          auto_ISS,
+          4
+        ),
+
+
       family=binomial,
+
+
       data=dat
+
     )
 
-    fits[[i]] <-
-      ivglm(
-        estmethod="ts",
-        fitX.LZ=fitX,
-        fitY.LX=fitY,
-        data=dat,
-        clusterid=dat$REGIO
+
+
+    iv_fit <- ivglm(
+
+      estmethod="ts",
+
+      fitX.LZ=fitX,
+
+      fitY.LX=fitY,
+
+      data=dat,
+
+      clusterid="TRAUMAREGIO"
+
+    )
+
+
+
+    estimates[[i]] <-
+
+      iv_fit$est
+
+
+
+    ses[[i]] <-
+
+      sqrt(
+        diag(
+          iv_fit$vcov
+        )
       )
 
   }
 
-  est <- do.call(
-    rbind,
-    lapply(fits,function(x)x$est)
+
+
+  pooled <- mi.meld(
+
+    do.call(rbind,estimates),
+
+    do.call(rbind,ses)
+
   )
 
-  se <- do.call(
-    rbind,
-    lapply(fits,function(x)sqrt(diag(x$vcov)))
+
+
+  data.frame(
+
+    Estimate =
+      pooled$q.mi,
+
+
+    SE =
+      pooled$se.mi,
+
+
+    OR =
+      exp(pooled$q.mi),
+
+
+    Lower95 =
+      exp(
+        pooled$q.mi -
+          1.96*pooled$se.mi
+      ),
+
+
+    Upper95 =
+      exp(
+        pooled$q.mi +
+          1.96*pooled$se.mi
+      )
+
   )
 
-  out <- mi.meld(est,se)
-
-  out$OR <- exp(out$q.mi)
-  out$Lower95 <- exp(out$q.mi-1.96*out$se.mi)
-  out$Upper95 <- exp(out$q.mi+1.96*out$se.mi)
-
-  out
 }
 
-############################################################
-# Run subgroup analyses
-############################################################
+# Run analyses
 
 elderly_results <-
+
   run_iv(
-    filter(Baseline_IV,ELDERLY==1)
+    filter(
+      data,
+      ELDERLY==1
+    )
+  ) %>%
+
+  mutate(
+    Subgroup="Age >=65 years"
   )
+
+
 
 tbi_results <-
+
   run_iv(
-    filter(Baseline_IV,TBI==1)
+    filter(
+      data,
+      TBI==1
+    )
+  ) %>%
+
+  mutate(
+    Subgroup="Traumatic brain injury"
   )
+
+
 
 critical_results <-
+
   run_iv(
-    filter(Baseline_IV,CRITICAL_INJURY==1)
+    filter(
+      data,
+      CRITICAL_INJURY==1
+    )
+  ) %>%
+
+  mutate(
+    Subgroup="Critical injury (ISS >=25)"
   )
 
-############################################################
-# Combine results
-############################################################
+Results <- bind_rows(
 
-Results <-
-  bind_rows(
+  elderly_results,
 
-    elderly_results %>%
-      mutate(Subgroup="Age ≥65 years"),
+  tbi_results,
 
-    tbi_results %>%
-      mutate(Subgroup="Traumatic brain injury"),
+  critical_results
 
-    critical_results %>%
-      mutate(Subgroup="Critical injury (ISS ≥25)")
-
-  )
-
-############################################################
-# Save results
-############################################################
-
-write_csv(
-  Results,
-  here(
-    "results",
-    "subgroup_results.csv"
-  )
 )
-
-message("Subgroup analyses completed.")
